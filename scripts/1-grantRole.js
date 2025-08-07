@@ -12,20 +12,15 @@ async function main() {
 
     // Replace with your contract name and constructor arguments if any
     const presaleArtifact = await hre.ethers.getContractFactory(CONTRACT_NAME);
-    const presale = presaleArtifact.attach("0x2Cac392BAb532a2E290E1c4972e0e8A89CB1adc0");
+    const presale = presaleArtifact.attach("0xDF24341E196698B03A731AD3377469b33Ba5d896");
 
     const role = "";
     const grantedAddress = ""
     const tx = await (await presale.grantRole()).wait()
     console.log(tx);
-    
+
 }
-// else {
-//     // USDT payment
-//     claimable =
-//         (amount * 10 ** IERC20Decimals(XRPINU).decimals()) /
-//         stage.usdPrice;
-// }
+
 main()
     .then(() => process.exit(0))
     .catch((error) => {
