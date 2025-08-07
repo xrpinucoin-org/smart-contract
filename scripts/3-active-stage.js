@@ -1,6 +1,5 @@
 const hre = require("hardhat");
 const ethers = require("ethers");
-const { default: Decimal } = require("decimal.js");
 
 const CONTRACT_NAME = "Presale"
 
@@ -11,7 +10,7 @@ async function main() {
     console.log("Deployer balance: ", ethers.formatEther((await provider.getBalance(deployer.address)).toString()));
 
     const presaleArtifact = await hre.ethers.getContractFactory(CONTRACT_NAME);
-    const presale = presaleArtifact.attach("0x2Cac392BAb532a2E290E1c4972e0e8A89CB1adc0");
+    const presale = presaleArtifact.attach("0xDF24341E196698B03A731AD3377469b33Ba5d896");
 
     const tx = await (await presale.activeStage(1)).wait()
     console.log(tx);

@@ -14,6 +14,7 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 /// @param usdPrice The price per token in USD, scaled by 10^8.
 /// @param remainAmount The number of tokens remaining for sale in this stage.
 struct Stage {
+    uint8 stageId;
     uint256 totalAmount;
     uint256 usdPrice;
     uint256 remainAmount;
@@ -26,7 +27,6 @@ interface IERC20Decimals is IERC20 {
 
 contract PresaleTestSepolia is AccessControl, Pausable, ReentrancyGuard {
     AggregatorV3Interface internal ethPriceFeed;
-    AggregatorV3Interface internal usdtPriceFeed;
 
     bytes32 public constant PAUSER = keccak256(abi.encodePacked(("PAUSER")));
     bytes32 public constant EMERGENCY_WITHDRAW =
@@ -38,14 +38,16 @@ contract PresaleTestSepolia is AccessControl, Pausable, ReentrancyGuard {
         0x69857EcE64cB4306028bE6f047077B33bE40b8a6;
     address public immutable USDT = 0xBfc2ADDEa1D83bB286C57E960720fa420e4273B8;
 
+    address public immutable fundsReceiver;
     uint8 public enableStage;
     bool public canClaim;
-    uint256 public totalRaisedInUsd;
+    uint256 public totalSold;
+    uint256 public totalRaisedInUsd; // in decimal 18
 
     mapping(uint8 => Stage) _stages;
     mapping(address => uint256) _claimables;
 
-    event StageRegisted(uint8 stage, uint256 totalAmount, uint256 usdPrice);
+    event StageRegistered(Stage[] stages);
     event StageActived(uint8 stage);
     event ClaimActived(bool canClaim);
     event Bought(
@@ -59,8 +61,9 @@ contract PresaleTestSepolia is AccessControl, Pausable, ReentrancyGuard {
     event Claimed(address recipient, uint256 amount);
     event EmergencyWithdrawal(address recipient, address token, uint256 amount);
 
-    constructor(address _owner) {
+    constructor(address _owner, address _fundsReceiver) {
         require(_owner != address(0), "Owner cannot be zero");
+        require(_fundsReceiver != address(0), "Funds receiver cannot be zero");
 
         _grantRole(DEFAULT_ADMIN_ROLE, _owner);
         _grantRole(PAUSER, _owner);
@@ -70,22 +73,33 @@ contract PresaleTestSepolia is AccessControl, Pausable, ReentrancyGuard {
         ethPriceFeed = AggregatorV3Interface(
             0x694AA1769357215DE4FAC081bf1f309aDC325306
         );
-        usdtPriceFeed = AggregatorV3Interface(
-            0x3E7d1eAB13ad0104d2750B8863b489D65364e32D
-        );
+
+        fundsReceiver = _fundsReceiver;
     }
 
-    function registryStage(
-        uint8 stage,
-        uint256 totalAmount,
-        uint256 usdPrice
+    function registerStages(
+        Stage[] memory stages
     ) external onlyRole(STAGE_REGISTER) {
-        require(totalAmount > 0, "Total amount must be greater than 0");
-        require(usdPrice > 0, "Price must be greater than zero");
-        require(_stages[stage].totalAmount == 0, "Stage is already existed");
+        for (uint8 i = 0; i < stages.length; i++) {
+            registerStage(stages[i]);
+        }
+        emit StageRegistered(stages);
+    }
 
-        _stages[stage] = Stage(totalAmount, usdPrice, totalAmount);
-        emit StageRegisted(stage, totalAmount, usdPrice);
+    function registerStage(Stage memory stage) internal {
+        require(stage.totalAmount > 0, "Total amount must be greater than 0");
+        require(stage.usdPrice > 0, "Price must be greater than zero");
+        require(
+            _stages[stage.stageId].totalAmount == 0,
+            "Stage already exists"
+        );
+
+        _stages[stage.stageId] = Stage(
+            stage.stageId,
+            stage.totalAmount,
+            stage.usdPrice,
+            stage.totalAmount
+        );
     }
 
     function activeStage(uint8 stage) external onlyRole(STAGE_REGISTER) {
@@ -116,6 +130,9 @@ contract PresaleTestSepolia is AccessControl, Pausable, ReentrancyGuard {
         int256 price;
         if (token == address(0)) {
             require(msg.value == amount, "Invalid amount");
+            (bool success, ) = fundsReceiver.call{value: amount}("");
+            require(success, "Buy failed");
+
             // ETH payment
             uint256 ethToUsd;
             (price, ethToUsd) = getEthToUsd(amount);
@@ -124,7 +141,7 @@ contract PresaleTestSepolia is AccessControl, Pausable, ReentrancyGuard {
                 stage.usdPrice;
         } else {
             // USDT payment
-            IERC20(token).transferFrom(msg.sender, address(this), amount);
+            IERC20(token).transferFrom(msg.sender, fundsReceiver, amount);
 
             uint256 usdtToUsd;
             (price, usdtToUsd) = getUsdtToUsd(amount);
@@ -132,13 +149,15 @@ contract PresaleTestSepolia is AccessControl, Pausable, ReentrancyGuard {
                 (usdtToUsd * 10 ** IERC20Decimals(XRPINU).decimals()) /
                 stage.usdPrice;
         }
-        _claimables[msg.sender] += claimableAmount;
-        stage.remainAmount -= claimableAmount;
-        totalRaisedInUsd += (claimableAmount * stage.usdPrice) / 10 ** 8;
         require(
             claimableAmount <= stage.remainAmount,
             "Claimable amount exceeds remain amount"
         );
+
+        _claimables[msg.sender] += claimableAmount;
+        stage.remainAmount -= claimableAmount;
+        totalSold += claimableAmount;
+        totalRaisedInUsd += (claimableAmount * stage.usdPrice) / 10 ** 8;
 
         emit Bought(
             enableStage,
@@ -177,17 +196,17 @@ contract PresaleTestSepolia is AccessControl, Pausable, ReentrancyGuard {
         require(amount > 0, "Zero amount");
 
         if (token == address(0)) {
-            (bool success, ) = msg.sender.call{value: amount}("");
+            (bool success, ) = fundsReceiver.call{value: amount}("");
             require(success, "Withdraw failed");
         } else {
-            IERC20(token).transfer(msg.sender, amount);
+            IERC20(token).transfer(fundsReceiver, amount);
         }
 
-        emit EmergencyWithdrawal(msg.sender, token, amount);
+        emit EmergencyWithdrawal(fundsReceiver, token, amount);
     }
 
-    function stageInfor(uint8 stageId) external view returns (Stage memory) {
-        return _stages[stageId];
+    function stageInfo(uint8 stage) external view returns (Stage memory) {
+        return _stages[stage];
     }
 
     function claimable(address recipient) external view returns (uint256) {

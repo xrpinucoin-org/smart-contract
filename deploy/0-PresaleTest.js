@@ -12,7 +12,10 @@ async function main() {
 
     // Replace with your contract name and constructor arguments if any
     const presaleArtifact = await hre.ethers.getContractFactory(CONTRACT_NAME);
-    const presale = await presaleArtifact.deploy(deployer.address);
+
+    const fundsReceiver = deployer.address; // Replace with the actual funds receiver address
+
+    const presale = await presaleArtifact.deploy(deployer.address, fundsReceiver);
 
     await presale.waitForDeployment();
 
