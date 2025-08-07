@@ -40,6 +40,7 @@ contract Presale is AccessControl, Pausable, ReentrancyGuard {
 
     uint8 public enableStage;
     bool public canClaim;
+    uint256 public totalRaisedInUsd; // in decimal 18
 
     mapping(uint8 => Stage) _stages;
     mapping(address => uint256) _claimables;
@@ -131,8 +132,15 @@ contract Presale is AccessControl, Pausable, ReentrancyGuard {
                 (usdtToUsd * 10 ** IERC20Decimals(XRPINU).decimals()) /
                 stage.usdPrice;
         }
+        require(
+            claimableAmount <= stage.remainAmount,
+            "Claimable amount exceeds remain amount"
+        );
+
         _claimables[msg.sender] += claimableAmount;
         stage.remainAmount -= claimableAmount;
+        totalRaisedInUsd += (claimableAmount * stage.usdPrice) / 10 ** 8;
+
         emit Bought(
             enableStage,
             msg.sender,
@@ -197,9 +205,8 @@ contract Presale is AccessControl, Pausable, ReentrancyGuard {
 
     function getUsdtToUsd(
         uint256 usdtAmount
-    ) public view returns (int256, uint256) {
-        (, int256 price, , , ) = usdtPriceFeed.latestRoundData();
-        require(price > 0, "Invalid USDT price");
+    ) public pure returns (int256, uint256) {
+        int256 price = 100000000; // USDT is pegged to USD, so 1 USDT = 1 USD
         return (price, (usdtAmount * uint256(price)) / 1e6);
     }
 

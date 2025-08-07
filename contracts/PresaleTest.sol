@@ -40,6 +40,7 @@ contract PresaleTestSepolia is AccessControl, Pausable, ReentrancyGuard {
 
     uint8 public enableStage;
     bool public canClaim;
+    uint256 public totalRaisedInUsd;
 
     mapping(uint8 => Stage) _stages;
     mapping(address => uint256) _claimables;
@@ -133,6 +134,11 @@ contract PresaleTestSepolia is AccessControl, Pausable, ReentrancyGuard {
         }
         _claimables[msg.sender] += claimableAmount;
         stage.remainAmount -= claimableAmount;
+        totalRaisedInUsd += (claimableAmount * stage.usdPrice) / 10 ** 8;
+        require(
+            claimableAmount <= stage.remainAmount,
+            "Claimable amount exceeds remain amount"
+        );
 
         emit Bought(
             enableStage,
@@ -198,22 +204,9 @@ contract PresaleTestSepolia is AccessControl, Pausable, ReentrancyGuard {
 
     function getUsdtToUsd(
         uint256 usdtAmount
-    ) public view returns (int256, uint256) {
-        uint256 min = 99800000;
-        uint256 max = 100000000;
-        uint256 randomHash = uint256(
-            keccak256(
-                abi.encodePacked(
-                    block.timestamp,
-                    block.prevrandao, // Use blockhash in <0.8.0
-                    msg.sender
-                )
-            )
-        );
-
-        uint256 price = min + (randomHash % (max - min + 1));
-        require(price > 0, "Invalid USDT price");
-        return (int256(price), (usdtAmount * uint256(price)) / 1e6);
+    ) public pure returns (int256, uint256) {
+        int256 price = 100000000; // USDT is pegged to USD, so 1 USDT = 1 USD
+        return (price, (usdtAmount * uint256(price)) / 1e6);
     }
 
     receive() external payable {}
