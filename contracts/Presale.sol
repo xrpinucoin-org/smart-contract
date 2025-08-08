@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.28;
 
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
@@ -109,8 +109,9 @@ contract Presale is AccessControl, Pausable, ReentrancyGuard {
         emit StageActived(stage);
     }
 
-    function toggleClaimStatus() external onlyRole(STAGE_REGISTER) {
-        canClaim = !canClaim;
+    function activeClaim() external onlyRole(STAGE_REGISTER) {
+        require(!canClaim, "Claim is already actived");
+        canClaim = true;
 
         emit ClaimActived(canClaim);
     }
